@@ -21,6 +21,7 @@ type Stats struct {
 	TotalResponseSize   int64
 	MetricsCounts       map[string]int
 	MetricsTimers       map[string]time.Time
+	RunningCount        int
 }
 
 // Label data structure
@@ -41,6 +42,7 @@ func New() *Stats {
 		TotalResponseCounts: map[string]int{},
 		TotalResponseTime:   time.Time{},
 		Hostname:            name,
+		RunningCount:        0,
 	}
 
 	go func() {
@@ -96,6 +98,12 @@ func (mw *Stats) Begin(w http.ResponseWriter) (time.Time, ResponseWriter) {
 
 	writer := NewRecorderResponseWriter(w, 200)
 
+	mw.mu.Lock()
+
+	defer mw.mu.Unlock()
+
+	mw.RunningCount++
+
 	return start, writer
 }
 
@@ -108,6 +116,8 @@ func (mw *Stats) End(start time.Time, opts ...Option) {
 	mw.mu.Lock()
 
 	defer mw.mu.Unlock()
+
+	mw.RunningCount--
 
 	// If Hijacked connection do not count in response time
 	if options.StatusCode() != 0 {
@@ -156,6 +166,7 @@ type Data struct {
 	AverageResponseTimeSec float64            `json:"average_response_time_sec"`
 	TotalMetricsCounts     map[string]int     `json:"total_metrics_counts"`
 	AverageMetricsTimers   map[string]float64 `json:"average_metrics_timers"`
+	RunningCount           int                `json:"running_count"`
 }
 
 // Data returns the data serializable structure
@@ -221,6 +232,7 @@ func (mw *Stats) Data() *Data {
 		AverageResponseTime:    averageResponseTime.String(),
 		AverageResponseTimeSec: averageResponseTime.Seconds(),
 		AverageMetricsTimers:   metricsCounts,
+		RunningCount:           mw.RunningCount,
 	}
 
 	return r
